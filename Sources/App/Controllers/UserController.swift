@@ -1,53 +1,60 @@
+import Vapor
+
 final class UserController {
-  let drop: Droplet
-  
-  init(drop: Droplet) {
-    self.drop = drop
-  }
-  
-  func list(_ req: Request) throws -> ResponseRepresentable {
-    let list = try User.all()
-    return try drop.view.make("crud", ["userlist": list.makeNode(in: nil)])
-  }
-  
-  func create(_ req: Request) throws -> ResponseRepresentable {
-    guard let username = req.data["username"]?.string else {
-      return Response(status: .badRequest)
+
+    func list(_ req: Request) throws -> Future<View> {
+        let allUsers = User.query(on: req).all()
+
+        return allUsers.flatMap { users in
+            let allUsers = User.query(on: req).all()
+            return allUsers.flatMap { users in
+                let userViewList = try users.map { user in
+                    return UserView(
+                        user: user,
+                        pokemons: try user.pokemons.query(on: req).all()
+                    )
+                }
+                let data = ["userViewlist": userViewList]
+                return try req.view().render("crud", data)
+            }
+        }
     }
-    
-    let user = User(username: username)
-    try user.save()
-    return Response(redirect: "/user")
-  }
-  
-  func update(_ req: Request) throws -> ResponseRepresentable {
-    guard let userId = req.parameters["id"]?.int else {
-      return Response(status: .badRequest)
+
+    func create(_ req: Request) throws -> Future<Response> {
+        return try req.content.decode(User.self).flatMap { user in
+            return user.save(on: req).map { _ in
+                return req.redirect(to: "/users")
+            }
+        }
     }
-    
-    guard let username = req.data["username"]?.string else {
-      return Response(status: .badRequest)
+
+    func update(_ req: Request) throws -> Future<Response> {
+        return try req.parameters.next(User.self).flatMap { user in
+            return try req.content.decode(UserForm.self).flatMap { userForm in
+                user.username = userForm.username
+                return user.save(on: req).map { _ in
+                    return req.redirect(to: "/users")
+                }
+            }
+        }
     }
-    
-    guard let user = try User.find(userId) else {
-      return Response(status: .badRequest)
+
+    func delete(_ req: Request) throws -> Future<Response> {
+        return try req.parameters.next(User.self).flatMap { user in
+            return try user.pokemons.query(on: req).delete().flatMap { _ in
+                return user.delete(on: req).map { _ in
+                    return req.redirect(to: "/users")
+                }
+            }
+        }
     }
-    
-    user.username = username
-    try user.save()
-    return Response(redirect: "/user")
-  }
-  
-  func delete(_ req: Request) throws -> ResponseRepresentable {
-    guard let userId = req.parameters["id"]?.int else {
-      return Response(status: .badRequest)
-    }
-    
-    guard let user = try User.find(userId) else {
-      return Response(status: .badRequest)
-    }
-    
-    try user.delete()
-    return Response(redirect: "/user")
-  }
+}
+
+struct UserForm: Content {
+    var username: String
+}
+
+struct UserView: Encodable {
+    var user: User
+    var pokemons: Future<[Pokemon]>
 }

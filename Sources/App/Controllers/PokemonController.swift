@@ -1,33 +1,25 @@
+import Vapor
+
 final class PokemonController {
-  
-  func create(_ req: Request) throws -> ResponseRepresentable {
-    
-    /// check userId is provided and of type int
-    guard let userId = req.data["userId"]?.int else {
-      return Response(status: .badRequest)
+    func create(_ req: Request) throws -> Future<Response> {
+        return try req.content
+            .decode(Pokemon.PokemonForm.self)
+            .flatMap { pokemonForm in
+                return User
+                    .find(pokemonForm.userId, on: req)
+                    .flatMap { user in
+                        guard let userId = try user?.requireID() else {
+                            throw Abort(.badRequest)
+                        }
+                        let pokemon = Pokemon(
+                            name: pokemonForm.name,
+                            level: pokemonForm.level,
+                            userID: userId
+                        )
+                        return pokemon.save(on: req).map { _ in
+                            return req.redirect(to: "/users")
+                        }
+                }
+        }
     }
-    
-    /// try to find user with given id (just an existence check)
-    guard try User.find(userId) != nil else {
-      return Response(status: .badRequest)
-    }
-    
-    /// check name is given and of type String
-    guard let pokemonName = req.data["name"]?.string else {
-      return Response(status: .badRequest)
-    }
-    
-    /// check level is given and of type Int
-    guard let level = req.data["level"]?.int else {
-      return Response(status: .badRequest)
-    }
-    
-    /// initiate new pokemon
-    let pokemon = Pokemon(name: pokemonName, level: level, userId: userId)
-    
-    /// save new pokemon to database
-    try pokemon.save()
-    
-    return Response(redirect: "/user")
-  }
 }
