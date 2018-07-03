@@ -4,19 +4,15 @@ final class UserController {
 
     func list(_ req: Request) throws -> Future<View> {
         let allUsers = User.query(on: req).all()
-
         return allUsers.flatMap { users in
-            let allUsers = User.query(on: req).all()
-            return allUsers.flatMap { users in
-                let userViewList = try users.map { user in
-                    return UserView(
-                        user: user,
-                        pokemons: try user.pokemons.query(on: req).all()
-                    )
-                }
-                let data = ["userViewlist": userViewList]
-                return try req.view().render("crud", data)
+            let userViewList = try users.map { user in
+                return UserView(
+                    user: user,
+                    pokemons: try user.pokemons.query(on: req).all()
+                )
             }
+            let data = ["userViewlist": userViewList]
+            return try req.view().render("crud", data)
         }
     }
 
